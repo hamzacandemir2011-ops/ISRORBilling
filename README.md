@@ -57,6 +57,9 @@ Appsettings is where you can configure the tool's behavior, you can override app
     "MaxFailuresPerUser": 10,  // 👈 Then that user id gets "blocked" until the window ends (0 = no limit)
     "MaxFailuresPerIp": 30     // 👈 Then that player IP gets "blocked IP" until the window ends (0 = no limit)
   },
+  "Metrics": {
+    "Enabled": true // 👈 Prometheus metrics on /metrics, see below
+  },
   "NationPingService": {
     "ListenAddress": "0.0.0.0",
     "ListenPort": 12989
@@ -84,6 +87,33 @@ Failed logins (wrong password, unknown user) are counted per user id and per pla
 
 ## Health check
 `GET /health` returns `Healthy` (HTTP 200) when the databases used by the selected services are reachable, and `Unhealthy` (HTTP 503) otherwise. It doesn't require the portal User-Agent, so you can point a monitoring tool (Uptime Kuma, a load balancer, etc.) at it.
+
+## Metrics
+`GET /metrics` exposes [Prometheus](https://prometheus.io/) metrics, so you can graph the billing in Grafana. Like `/health`, it doesn't require the portal User-Agent. Set `Metrics:Enabled` to `false` to turn it off.
+
+| Metric | What it counts |
+|---|---|
+| `billing_logins_total{result}` | Login requests by result: `success`, `wrong_password`, `user_not_found`, `error`, `blocked_user`, `blocked_ip`, `expired_request`, `invalid_signature`, `malformed`, `other` |
+| `billing_login_duration_seconds` | How long checking a login takes (auth service + database) |
+| `billing_notifications_total{type,result}` | Second password (`second_password`) and item lock (`item_lock`) requests: `success`, `failure`, `malformed` |
+| `http_requests_received_total`, `http_request_duration_seconds` | HTTP requests per endpoint and status code |
+
+Plus the standard .NET process metrics (CPU, memory, GC...).
+
+Prometheus scrape config example:
+```yaml
+scrape_configs:
+  - job_name: isror-billing
+    static_configs:
+      - targets: ["127.0.0.1:18080"]
+```
+
+Useful queries:
+- Logins per minute by result: `sum by (result) (rate(billing_logins_total[5m])) * 60`
+- Brute-force blocks in the last hour: `sum(increase(billing_logins_total{result=~"blocked_.*"}[1h]))`
+- 95th percentile login time: `histogram_quantile(0.95, sum by (le) (rate(billing_login_duration_seconds_bucket[5m])))`
+
+`invalid_signature` going up usually means a SaltKey mismatch with the GatewayServer, or someone calling the billing directly.
 
 > ⚠️ **Security:** the `SaltKey` above is the public default that ships with the GatewayServer, so anyone can sign requests with it. If you can, patch your GatewayServer with your own value and set the same one here. Also never expose the billing port (`18080`) to the internet, only the GatewayServer needs to reach it.
 

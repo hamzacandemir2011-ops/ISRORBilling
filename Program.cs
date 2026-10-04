@@ -7,6 +7,7 @@ using ISRORBilling.Models.Options;
 using ISRORBilling.Models.Ping;
 using ISRORBilling.Services.Authentication;
 using ISRORBilling.Services.Authentication.CommunityProvided.Nemo07;
+using ISRORBilling.Services.Metrics;
 using ISRORBilling.Services.Notification;
 using ISRORBilling.Services.Notification.CommunityProvided;
 using ISRORBilling.Services.Ping;
@@ -14,6 +15,7 @@ using ISRORBilling.Services.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NReco.Logging.File;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +35,9 @@ builder.Services.AddDbContext<JoymaxPortalContext>(options =>
     options.UseSqlServer(builder.Configuration.GetSection("DbConfig")["JoymaxPortalDB"]);
     options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
 });
+
+var metricsEnabled = builder.Configuration.GetValue("Metrics:Enabled", true);
+builder.Services.AddSingleton(_ => new BillingMetrics(Metrics.DefaultRegistry));
 
 builder.Services.AddMemoryCache();
 builder.Services.Configure<LoginThrottleOptions>(builder.Configuration.GetSection("LoginThrottle"));
@@ -95,61 +100,75 @@ var requestTimeoutSeconds = int.Parse(builder.Configuration.GetSection("RequestT
 var saltKey = builder.Configuration.GetSection("SaltKey").Value ?? string.Empty;
 var app = builder.Build();
 
+if (metricsEnabled)
+    app.UseHttpMetrics(); // request count/duration per endpoint
+
 if (loginService == SupportedLoginServicesEnum.Bypass)
     app.Logger.LogCritical("AuthService is set to Bypass: passwords are NOT checked. Never use this in production!");
 
 app.MapGet("/Property/Silkroad-r/checkuser.aspx",
     ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] IAuthService authService,
-        [FromServices] LoginThrottle loginThrottle) =>
+        [FromServices] LoginThrottle loginThrottle, [FromServices] BillingMetrics metrics) =>
     {
         if (!CheckUserRequest.TryParse(values, saltKey, serviceCompany, requestTimeoutSeconds, out var request))
         {
             logger.LogWarning("Received malformed checkuser request ({Length} chars)", values.Length);
+            metrics.LoginMalformed();
             return new AUserLoginResponse { ReturnValue = LoginResponseCodeEnum.Error }.ToString();
         }
 
         logger.LogDebug("Received checkuser request: {Request}", request);
         if (loginThrottle.Check(request) is { } blockedCode)
+        {
+            metrics.LoginResult(blockedCode);
             return new AUserLoginResponse { ReturnValue = blockedCode }.ToString();
+        }
 
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var response = authService.Login(request);
+        metrics.LoginDuration(System.Diagnostics.Stopwatch.GetElapsedTime(started));
+        metrics.LoginResult(response.ReturnValue);
         loginThrottle.Record(request, response.ReturnValue);
         return response.ToString();
     });
 
 app.MapGet("/cgi/EmailPassword.asp",
-    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] INotificationService notificationService) =>
+    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] INotificationService notificationService,
+        [FromServices] BillingMetrics metrics) =>
     {
         if (!SendCodeRequest.TryParse(values, saltKey, out var request))
         {
             logger.LogWarning("Received malformed EmailPassword request ({Length} chars)", values.Length);
+            metrics.NotificationMalformed(BillingMetrics.NotificationTypes.SecondPassword);
             return -1;
         }
 
         logger.LogDebug("Received EmailPassword request: {Request}", request);
-        if (await notificationService.SendSecondPassword(request))
-            return 0;
-
-        return -1;
+        var sent = await notificationService.SendSecondPassword(request);
+        metrics.Notification(BillingMetrics.NotificationTypes.SecondPassword, sent);
+        return sent ? 0 : -1;
     });
 
 app.MapGet("/cgi/Email_Certification.asp",
-    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] INotificationService notificationService) =>
+    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] INotificationService notificationService,
+        [FromServices] BillingMetrics metrics) =>
     {
         if (!SendCodeRequest.TryParse(values, saltKey, out var request))
         {
             logger.LogWarning("Received malformed Email_Certification request ({Length} chars)", values.Length);
+            metrics.NotificationMalformed(BillingMetrics.NotificationTypes.ItemLock);
             return -1;
         }
 
         logger.LogDebug("Received Email_Certification request: {Request}", request);
-        if (await notificationService.SendItemLockCode(request))
-            return 0;
-
-        return -1;
+        var sent = await notificationService.SendItemLockCode(request);
+        metrics.Notification(BillingMetrics.NotificationTypes.ItemLock, sent);
+        return sent ? 0 : -1;
     });
 
 app.MapHealthChecks(GenericHandlerMiddleware.HealthPath);
+if (metricsEnabled)
+    app.MapMetrics(BillingMetrics.Path);
 
 app.UseMiddleware<GenericHandlerMiddleware>(); //Useful to log incoming unknown requests
 
