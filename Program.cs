@@ -12,7 +12,7 @@ using ISRORBilling.Services.Notification.CommunityProvided;
 using ISRORBilling.Services.Ping;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
+using NReco.Logging.File;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,7 +45,7 @@ switch (notificationServiceType)
         break;
     
     case NotificationServiceType.Ferre:
-        builder.Services.AddSingleton<INotificationService, FerreNotificationService>();
+        builder.Services.AddScoped<INotificationService, FerreNotificationService>(); // Scoped: it depends on AccountContext
         break;
     
     case NotificationServiceType.None:
@@ -83,22 +83,32 @@ var requestTimeoutSeconds = int.Parse(builder.Configuration.GetSection("RequestT
 var saltKey = builder.Configuration.GetSection("SaltKey").Value ?? string.Empty;
 var app = builder.Build();
 
+if (loginService == SupportedLoginServicesEnum.Bypass)
+    app.Logger.LogCritical("AuthService is set to Bypass: passwords are NOT checked. Never use this in production!");
+
 app.MapGet("/Property/Silkroad-r/checkuser.aspx",
     ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] IAuthService authService) =>
     {
-        logger.LogDebug("Received in params: {Values}", values);
-        var request = new CheckUserRequest(values, saltKey, serviceCompany, requestTimeoutSeconds);
-        
+        if (!CheckUserRequest.TryParse(values, saltKey, serviceCompany, requestTimeoutSeconds, out var request))
+        {
+            logger.LogWarning("Received malformed checkuser request ({Length} chars)", values.Length);
+            return new AUserLoginResponse { ReturnValue = LoginResponseCodeEnum.Error }.ToString();
+        }
+
+        logger.LogDebug("Received checkuser request: {Request}", request);
         return authService.Login(request).ToString();
     });
 
 app.MapGet("/cgi/EmailPassword.asp",
-    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] AccountContext accountContext,
-        [FromServices] INotificationService notificationService) =>
+    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] INotificationService notificationService) =>
     {
-        logger.LogDebug("Received in params: {Values}", values);
-        var request = new SendCodeRequest(values, saltKey);
+        if (!SendCodeRequest.TryParse(values, saltKey, out var request))
+        {
+            logger.LogWarning("Received malformed EmailPassword request ({Length} chars)", values.Length);
+            return -1;
+        }
 
+        logger.LogDebug("Received EmailPassword request: {Request}", request);
         if (await notificationService.SendSecondPassword(request))
             return 0;
 
@@ -106,12 +116,15 @@ app.MapGet("/cgi/EmailPassword.asp",
     });
 
 app.MapGet("/cgi/Email_Certification.asp",
-    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] AccountContext accountContext,
-        [FromServices] INotificationService notificationService) =>
+    async ([FromQuery] string values, [FromServices] ILogger<Program> logger, [FromServices] INotificationService notificationService) =>
     {
-        logger.LogDebug("Received in params: {Values}", values);
-        var request = new SendCodeRequest(values, saltKey);
+        if (!SendCodeRequest.TryParse(values, saltKey, out var request))
+        {
+            logger.LogWarning("Received malformed Email_Certification request ({Length} chars)", values.Length);
+            return -1;
+        }
 
+        logger.LogDebug("Received Email_Certification request: {Request}", request);
         if (await notificationService.SendItemLockCode(request))
             return 0;
 

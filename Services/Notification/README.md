@@ -74,11 +74,13 @@ Works by receiving the same request than email method from the gatewayserver, bu
 ```
 
 ### Steps
-1-Excute this [Update_ItemLock.sql Script](/Database/CommunityProvided/F3rreNotificationService/Scripts/Update_ItemLock.sql)
+1-Execute this [Update_TbUser.sql Script](/Database/CommunityProvided/F3rreNotificationService/Scripts/UpdateTbUser.sql) (the procedures below use the columns it adds)
 
-2-Excute this [Update_SecPassWord.sql Script](/Database/CommunityProvided/F3rreNotificationService/Scripts/Update_SecPassWord.sql)
+2-Execute this [Update_ItemLock.sql Script](/Database/CommunityProvided/F3rreNotificationService/Scripts/Update_ItemLock.sql)
 
-3-Excute this [Update_TbUser.sql Script](/Database/CommunityProvided/F3rreNotificationService/Scripts/UpdateTbUser.sql)
+3-Execute this [Update_SecPassWord.sql Script](/Database/CommunityProvided/F3rreNotificationService/Scripts/Update_SecPassWord.sql)
+
+> **Already installed these procedures before?** Older versions of both scripts had a bug (`WHERE JID = JID`) that only checked if the email existed on *any* account. Re-run both scripts using `ALTER PROCEDURE` to get the fix.
 
 4-Choose **Type : Ferre** from "*appsettings.json*" 👈👀
 

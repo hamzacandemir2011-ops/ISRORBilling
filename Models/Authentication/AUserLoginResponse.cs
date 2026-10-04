@@ -23,12 +23,12 @@ public class AUserLoginResponse
     {
         return $"{(int)ReturnValue}|" + 
                $"{JID}|" +
-               $"{(CurrentDate ?? DateTime.Now).ToString("yyyy-MM-dd hh:mm:ss", CultureInfo.InvariantCulture)}|" +
+               $"{(CurrentDate ?? DateTime.Now).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}|" +
                $"{EmailCertificationStatus}|" + // Not confirmed
                $"{EmailUniqueStatus}|" + // Not 100% confirmed, it could be either EmailUniqueStatus or EmailCertificationStatus, but's one of those.
                $"{EmailAddr ?? "NULL"}|" +
                $"{VipLevel ?? 0}|" +
-               $"{(VipExpireTime ?? DateTime.Now).ToString("yyyy-MM-dd hh:mm:ss", CultureInfo.InvariantCulture)}|" +
+               $"{(VipExpireTime ?? DateTime.Now).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}|" +
                $"{(int)(VipUserType ?? Enums.VipUserType.Free)}|" + 
                $"AFAILUREDESCRIPTION?|" + //This is named "desc" on the error message on the gateway when there's a failure during login.
                $"URL-RELATED?" ; //This is named "url" on the error message on the gateway when there's a failure during login.

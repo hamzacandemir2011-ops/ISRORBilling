@@ -2,6 +2,7 @@ using ISRORBilling.Database;
 using ISRORBilling.Models.Authentication;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
+using System.Net.Sockets;
 
 namespace ISRORBilling.Services.Authentication;
 
@@ -22,17 +23,8 @@ public class FullAuthService : IAuthService
 
 	public AUserLoginResponse Login(CheckUserRequest request)
 	{
-        if (request.RequestTimeoutSeconds < DateTimeOffset.Now.ToUnixTimeSeconds())
-        {
-            _logger.LogCritical("Request Login URL is expired [Error Code: {0}]\nDetails: Request UnixTimeStamp({1}) < Now UnixTimeStamp({2})", (int)LoginResponseCodeEnum.ExpiredRequestUrl, request.RequestTimeoutSeconds, DateTimeOffset.Now.ToUnixTimeSeconds());
-            return new AUserLoginResponse { ReturnValue = LoginResponseCodeEnum.ExpiredRequestUrl };
-        }
-
-		if (!request.Validate())
-		{
-			_logger.LogCritical("Couldn't validate if request was legitimate. Ensure the SaltKey matches the one in GatewayServer. [Error Code: {ErrorCode}]\nDetails:{Request}", (int)LoginResponseCodeEnum.Emergency, request);
-			return new AUserLoginResponse { ReturnValue = LoginResponseCodeEnum.Emergency };
-		}
+        if (CheckUserRequestGuard.Check(request, _logger) is { } errorCode)
+            return new AUserLoginResponse { ReturnValue = errorCode };
 
 		return Login(request.UserId, request.HashedUserPassword, request.ChannelId.ToString(), request.ServiceCompany, request.UserIp);
 	}
@@ -90,9 +82,19 @@ public class FullAuthService : IAuthService
 		    { ReturnValue = LoginResponseCodeEnum.NotFoundUid };
     }
 
+    /// <summary>
+    /// Converts the user IP to the binary(4) expected by A_UserLogin. Anything that is not an IPv4 address becomes 0.0.0.0.
+    /// </summary>
     private static byte[] IP2Bin(string userIp)
     {
-        var ipbytes = IPAddress.Parse(userIp).GetAddressBytes();
+        if (!IPAddress.TryParse(userIp, out var address))
+            address = IPAddress.Any;
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+        if (address.AddressFamily != AddressFamily.InterNetwork)
+            address = IPAddress.Any;
+
+        var ipbytes = address.GetAddressBytes();
         if (BitConverter.IsLittleEndian) Array.Reverse(ipbytes);
         return ipbytes;
     }

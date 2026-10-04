@@ -15,6 +15,8 @@ namespace ISRORBilling.Services.Ping
 
         private readonly TcpListener _tcpListener;
 
+        private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(10);
+
         public NationPingService(ILogger<NationPingService> logger, IOptions<NationPingServiceOptions> options)
         {
             _logger = logger;
@@ -45,7 +47,27 @@ namespace ISRORBilling.Services.Ping
                 if (_logger.IsEnabled(LogLevel.Debug))
                     _logger.LogDebug("[{clientEndPoint}]: connected.", socket.RemoteEndPoint);
 
-                _ = ProcessSocket(socket, cancellationToken);
+                _ = ProcessSocketSafe(socket, cancellationToken);
+            }
+        }
+
+        private async Task ProcessSocketSafe(Socket socket, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Clients that connect and never send a full request must not keep the socket open forever.
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(ReadTimeout);
+                await ProcessSocket(socket, timeoutCts.Token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is OperationCanceledException or IOException or SocketException or EndOfStreamException)
+            {
+                if (_logger.IsEnabled(LogLevel.Debug))
+                    _logger.LogDebug("Ping connection closed: {Reason}", e.Message);
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Unexpected error while processing a ping connection");
             }
         }
 

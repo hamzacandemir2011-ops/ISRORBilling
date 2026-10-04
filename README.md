@@ -54,7 +54,10 @@ Appsettings is where you can configure the tool's behavior, you can override app
     "ListenAddress": "0.0.0.0",
     "ListenPort": 12989
   },
-  "SaltKey": "eset5ag.nsy-g6ky5.mp",  // 👈 Used to validate payloads in some of the auth services. it must match the GatewayServer hardcoded value!
+  "ServiceCompany": 11,
+  "RequestTimeoutSeconds": 60, // 👈 Login requests older than this are rejected (replay protection). GatewayServer and billing clocks must be in sync.
+  "PortalCGIAgentHeader": "Portal_CGI_Agent", // 👈 Only filters casual browsing; it's trivial to fake, the SaltKey is the real protection.
+  "SaltKey": "eset5ag.nsy-g6ky5.mp",  // 👈 Used to validate payloads in the auth services. It must match the GatewayServer hardcoded value!
   "AllowedHosts": "*" // 👈 learn more: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/host-filtering?view=aspnetcore-6.0
 }
 ```
@@ -68,6 +71,10 @@ But in a nutshell,
 The end result will be that appsettings.json will be merged internally with `appsettings.myserver.json`. 
 
 Useful for setting certain credentials that you don't want committed to git by accident.
+
+> ⚠️ **Security:** the `SaltKey` above is the public default that ships with the GatewayServer, so anyone can sign requests with it. If you can, patch your GatewayServer with your own value and set the same one here. Also never expose the billing port (`18080`) to the internet, only the GatewayServer needs to reach it.
+
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) to build. Run the tests with `dotnet test`.
 
 ## About services
 We try to follow "micro-service" architechture approach, this is done to allow multiple different implementations of a given service, so that the community can easily customize the behavior of their application.

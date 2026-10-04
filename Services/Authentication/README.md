@@ -46,7 +46,7 @@ This would support email authentication, however, some tweaks are needed to make
 ### Bypass
 You like living on the edge, and security is just an inconvinient myth.
 When the property `AuthService` in `appsettings.json` is set to `Bypass`, the login flow uses `[TB_User]` and just finds the JID for the UserId you've provided during the login;
-It completely **bypasses the password**
+It completely **bypasses the password** (and the SaltKey validation). The billing logs a critical warning at startup when this mode is on. **Never use it on a live server.**
 
 ```json
 {
@@ -67,6 +67,8 @@ It's a feature that make you use **VIP system** with simple authorizer for peopl
   ...
 }
 ```
+
+Like `Simple`, it checks the password, validates the request with the `SaltKey` and rejects expired requests (`RequestTimeoutSeconds`).
 
 You can see [more details here](/Services/Authentication/CommunityProvided/Nemo07#made-by-nemo07)
 
@@ -120,7 +122,7 @@ switch (loginService)
         builder.Services.AddSingleton<IAuthService, SimpleAuthService>();
         break;
     case SupportedLoginServicesEnum.Bypass:
-        builder.Services.AddSingleton<IAuthService, BypassAuthService>();
+        builder.Services.AddScoped<IAuthService, BypassAuthService>();
         break;
     case SupportedLoginServicesEnum.NoDb: // 👈 Enum created earlier, matching the service name.
         builder.Services.AddSingleton<IAuthService, NoDbAuthService>(); // 👈 New implementation created earlier, note we use NoDbAuthService.

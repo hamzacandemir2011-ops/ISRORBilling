@@ -1,6 +1,5 @@
 using ISRORBilling.Database;
 using ISRORBilling.Models.Authentication;
-using Microsoft.IdentityModel.Tokens;
 
 namespace ISRORBilling.Services.Authentication;
 
@@ -17,17 +16,14 @@ public class SimpleAuthService : IAuthService
 
     public AUserLoginResponse Login(CheckUserRequest request)
     {
-        if (!request.Validate())
-        {
-            _logger.LogCritical("Couldn't validate if request was legitimate. Ensure the SaltKey matches the one in GatewayServer. [Error Code: {ErrorCode}]\nDetails:{Request}", (int)LoginResponseCodeEnum.Emergency, request);
-            return new AUserLoginResponse { ReturnValue = LoginResponseCodeEnum.Emergency };
-        }
+        if (CheckUserRequestGuard.Check(request, _logger) is { } errorCode)
+            return new AUserLoginResponse { ReturnValue = errorCode };
 
         return Login(request.UserId, request.HashedUserPassword, request.ChannelId.ToString());
     }
     public AUserLoginResponse Login(string userId, string userPw, string channel)
     {
-        if (userId.IsNullOrEmpty()) 
+        if (string.IsNullOrEmpty(userId)) 
             return new AUserLoginResponse() {ReturnValue = LoginResponseCodeEnum.Error};
         
         var user = channel switch
