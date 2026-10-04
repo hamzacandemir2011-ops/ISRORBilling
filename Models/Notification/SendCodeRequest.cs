@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace ISRORBilling.Models.Notification;
 
@@ -9,6 +11,7 @@ namespace ISRORBilling.Models.Notification;
 public class SendCodeRequest : GatewayRequest
 {
     public int jid { get; }
+    [JsonIgnore]
     public string code { get; }
     public string email { get; }
 
@@ -22,14 +25,38 @@ public class SendCodeRequest : GatewayRequest
         }
     }
 
+    /// <summary>
+    /// Parses the "values" sent by the GatewayServer: jid|code|email[|token]
+    /// </summary>
+    /// <exception cref="FormatException">If the values are malformed.</exception>
     public SendCodeRequest(string values, string? saltKey = null)
     {
-        SaltKey = saltKey;
         var allValues = values.Split('|');
-        jid = int.Parse(allValues[0]);
+        if (allValues.Length < 3 || !int.TryParse(allValues[0], out var parsedJid))
+            throw new FormatException("Malformed send code request values");
+
+        SaltKey = saltKey;
+        jid = parsedJid;
         code = allValues[1];
         email = allValues[2];
         UserProvidedValidationToken = allValues.ElementAtOrDefault(3);
+    }
+
+    public static bool TryParse(string? values, string? saltKey, [NotNullWhen(true)] out SendCodeRequest? request)
+    {
+        request = null;
+        if (string.IsNullOrEmpty(values))
+            return false;
+
+        try
+        {
+            request = new SendCodeRequest(values, saltKey);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
 }

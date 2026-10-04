@@ -1,6 +1,5 @@
 using ISRORBilling.Database;
 using ISRORBilling.Models.Authentication;
-using Microsoft.IdentityModel.Tokens;
 
 namespace ISRORBilling.Services.Authentication;
 
@@ -16,7 +15,7 @@ public class BypassAuthService : IAuthService
 
     public AUserLoginResponse Login(string userId, string userPw, string channel)
     {
-        if (userId.IsNullOrEmpty()) return new AUserLoginResponse() {ReturnValue = LoginResponseCodeEnum.Error};
+        if (string.IsNullOrEmpty(userId)) return new AUserLoginResponse() {ReturnValue = LoginResponseCodeEnum.Error};
         var user = channel switch
         {
             "1" => _accountContext.Users.FirstOrDefault(user => user.StrUserID == userId ),

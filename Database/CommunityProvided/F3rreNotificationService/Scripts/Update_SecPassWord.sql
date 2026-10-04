@@ -27,7 +27,7 @@ BEGIN
 			EXISTS (
 				SELECT *
 				FROM TB_User
-				WHERE JID = JID
+				WHERE JID = @JID
 					AND Email = @Email
 				)
 			)

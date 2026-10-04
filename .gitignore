@@ -423,3 +423,6 @@ $RECYCLE.BIN/
 appsettings.*.json
 .fleet/**
 /Properties/launchSettings.json
+
+# Billing runtime log
+BillingLog*.txt
