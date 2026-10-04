@@ -1,3 +1,5 @@
+using ISRORBilling.Models.Notification;
+
 namespace ISRORBilling.Models.Options;
 
 /// <summary>
@@ -13,4 +15,5 @@ public class EmailOptions
     public string UserName { get; set; } = "";
     public string Password { get; set; } = "";
     public bool SkipTokenValidation { get; set; }
+    public EmailTemplates Templates { get; set; } = new();
 }

@@ -48,7 +48,14 @@ Appsettings is where you can configure the tool's behavior, you can override app
     "Port": 465,
     "Username": "FOLLOW https://code-maze.com/aspnetcore-send-email/",
     "Password": "FOLLOW https://code-maze.com/aspnetcore-send-email/",
-    "SkipTokenValidation": false
+    "SkipTokenValidation": false,
+    "Templates": { ... } // 👈 Optional: customize the email texts, see the Notification Service README
+  },
+  "LoginThrottle": {
+    "Enabled": true,
+    "WindowMinutes": 15,       // 👈 Failed logins are counted per window
+    "MaxFailuresPerUser": 10,  // 👈 Then that user id gets "blocked" until the window ends (0 = no limit)
+    "MaxFailuresPerIp": 30     // 👈 Then that player IP gets "blocked IP" until the window ends (0 = no limit)
   },
   "NationPingService": {
     "ListenAddress": "0.0.0.0",
@@ -71,6 +78,12 @@ But in a nutshell,
 The end result will be that appsettings.json will be merged internally with `appsettings.myserver.json`. 
 
 Useful for setting certain credentials that you don't want committed to git by accident.
+
+## Brute-force protection
+Failed logins (wrong password, unknown user) are counted per user id and per player IP, using the IP that the GatewayServer sends in the signed request. Billing's HTTP caller is always the GatewayServer, so the HTTP IP would be useless here. When a limit is reached, further logins for that user or IP are rejected (`BlockedJid` / `BlockedIp`) until the window ends. A successful login resets the user's counter. Counters live in memory, so they reset when the billing restarts. Configure it under `LoginThrottle`.
+
+## Health check
+`GET /health` returns `Healthy` (HTTP 200) when the databases used by the selected services are reachable, and `Unhealthy` (HTTP 503) otherwise. It doesn't require the portal User-Agent, so you can point a monitoring tool (Uptime Kuma, a load balancer, etc.) at it.
 
 > ⚠️ **Security:** the `SaltKey` above is the public default that ships with the GatewayServer, so anyone can sign requests with it. If you can, patch your GatewayServer with your own value and set the same one here. Also never expose the billing port (`18080`) to the internet, only the GatewayServer needs to reach it.
 
