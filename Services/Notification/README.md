@@ -3,6 +3,7 @@
     * [**Email (_Recommended - Default_)**](#--email---recommended---default----)
         + [***Requirements***:](#---requirements----)
         + [Steps](#steps)
+        + [Customizing the emails](#customizing-the-emails)
     * [**Ferre's**](#--ferre-s--)
         + [***Requirements***:](#---requirements-----1)
         + [Steps](#steps-1)
@@ -48,6 +49,34 @@ We've used GMAIL for testing and you can learn how to get your account ready fol
 ### Steps
 1. Enable SMTP on your service provider (can be gmail or any of your choosing)
 2. Configure appsettings.json
+
+### Customizing the emails
+The subject and body of both emails can be changed under `EmailService:Templates`, for example to translate them. You only need to set what you want to change; anything you leave out keeps the default text.
+
+Available placeholders: `{ServerName}` (the `FromFriendlyName`), `{Code}`, `{Email}` and `{Jid}`.
+
+```json
+{
+  "EmailService": {
+    ...
+    "Templates": {
+      "SecondPassword": {
+        "Subject": "[{ServerName}] Yeni ikinci şifreniz",
+        "Body": "{ServerName} sunucusu için yeni ikinci şifreniz: {Code}"
+      },
+      "ItemLock": {
+        "Subject": "[{ServerName}] Item kilit kodu",
+        "BodyFile": "EmailTemplates/item-lock.example.html", // 👈 Optional: read the body from a file
+        "IsHtml": true                                      // 👈 Send it as HTML
+      }
+    }
+  }
+}
+```
+
+- `BodyFile` can be absolute or relative to the billing folder. It's read on every email, so you can edit it without restarting. If it can't be read, `Body` is used instead (and an error is logged).
+- With `IsHtml: true`, placeholder values are HTML-encoded.
+- Two ready-to-edit HTML examples are included in [`EmailTemplates`](/EmailTemplates).
 
 ## **Ferre's**
 

@@ -4,6 +4,11 @@ namespace ISRORBilling;
 
 public class GenericHandlerMiddleware
 {
+    /// <summary>
+    /// Health endpoint, reachable without the portal User-Agent so monitoring tools can use it.
+    /// </summary>
+    public const string HealthPath = "/health";
+
     private readonly RequestDelegate _next;
     private readonly ILogger<GenericHandlerMiddleware> _logger;
     private readonly string? _portalCgiAgentHeader;
@@ -32,7 +37,8 @@ public class GenericHandlerMiddleware
 
         // NOTE: the User-Agent is trivially spoofable, it only filters out casual browsing. The SaltKey is the real protection.
         var userAgentHeader = context.Request.Headers.UserAgent;
-        if (!string.IsNullOrEmpty(_portalCgiAgentHeader) &&
+        if (!request.Path.Equals(HealthPath, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrEmpty(_portalCgiAgentHeader) &&
             userAgentHeader.All(userAgent => userAgent != _portalCgiAgentHeader))
         {
             _logger.LogCritical(

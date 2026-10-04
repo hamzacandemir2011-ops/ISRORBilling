@@ -45,6 +45,41 @@ public class EmailNotificationService : INotificationService
         }
     }
 
+    /// <summary>
+    /// Fills the template placeholders for this request. Falls back to the inline body if the body file can't be read.
+    /// </summary>
+    public EmailMessage BuildMessage(EmailTemplate template, SendCodeRequest request)
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["ServerName"] = _emailOptions.FromFriendlyName,
+            ["Code"] = request.code,
+            ["Email"] = request.email,
+            ["Jid"] = request.jid.ToString(),
+        };
+
+        var body = template.Body;
+        if (!string.IsNullOrWhiteSpace(template.BodyFile))
+        {
+            var path = Path.IsPathRooted(template.BodyFile)
+                ? template.BodyFile
+                : Path.Combine(AppContext.BaseDirectory, template.BodyFile);
+            try
+            {
+                body = File.ReadAllText(path);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogError(e, "Couldn't read email body file [{BodyFile}], using the inline body instead", path);
+            }
+        }
+
+        return new EmailMessage(request.email,
+            EmailTemplate.Render(template.Subject, values, htmlEncode: false),
+            EmailTemplate.Render(body, values, template.IsHtml),
+            template.IsHtml);
+    }
+
     private bool IsRequestValid(SendCodeRequest request)
     {
         if (_emailOptions.SkipTokenValidation || request.Validate())
@@ -59,7 +94,7 @@ public class EmailNotificationService : INotificationService
         if (!IsRequestValid(request))
             return false;
         
-        var mimeMessage = new EmailMessage(request.email, $"[{_emailOptions.FromFriendlyName}] New secondary password!", $"Your new secondary password for server [{_emailOptions.FromFriendlyName}] is [{request.code}]")
+        var mimeMessage = BuildMessage(_emailOptions.Templates.SecondPassword, request)
             .ToMimeMessage(_emailOptions.FromFriendlyName, _emailOptions.From);
         
         if(await SendEmailAsync(mimeMessage)) 
@@ -74,7 +109,7 @@ public class EmailNotificationService : INotificationService
         if (!IsRequestValid(request))
             return false;
 
-        var mimeMessage = new EmailMessage(request.email, $"[{_emailOptions.FromFriendlyName}] Item lock code!", $"Your item lock code for server [{_emailOptions.FromFriendlyName}] is [{request.code}]")
+        var mimeMessage = BuildMessage(_emailOptions.Templates.ItemLock, request)
             .ToMimeMessage(_emailOptions.FromFriendlyName, _emailOptions.From);
         
         if(await SendEmailAsync(mimeMessage)) 
