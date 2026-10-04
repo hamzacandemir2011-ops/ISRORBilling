@@ -136,4 +136,49 @@ public class EndpointTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
     }
+
+    private static double ReadMetric(string text, string series)
+    {
+        var line = text.Split('\n').Single(l => l.StartsWith(series + " "));
+        return double.Parse(line[(series.Length + 1)..], System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [Fact]
+    public async Task Metrics_AreExposedWithoutPortalAgent_AndCountLogins()
+    {
+        var auth = new FixedAuthService(LoginResponseCodeEnum.Success);
+        await using var factory = CreateFactory(services =>
+        {
+            services.RemoveAll<IAuthService>();
+            services.AddSingleton<IAuthService>(auth);
+        });
+        var browser = factory.CreateClient();
+        var gateway = CreatePortalClient(factory);
+
+        var response = await browser.GetAsync("/metrics");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var before = await response.Content.ReadAsStringAsync();
+
+        await gateway.GetStringAsync(CheckUserUrl("metrics-user"));
+        await gateway.GetStringAsync("/Property/Silkroad-r/checkuser.aspx?values=garbage");
+
+        var after = await browser.GetStringAsync("/metrics");
+        const string success = "billing_logins_total{result=\"success\"}";
+        const string malformed = "billing_logins_total{result=\"malformed\"}";
+        Assert.Equal(ReadMetric(before, success) + 1, ReadMetric(after, success));
+        Assert.Equal(ReadMetric(before, malformed) + 1, ReadMetric(after, malformed));
+        Assert.Contains("http_requests_received_total", after);
+        Assert.Contains("billing_login_duration_seconds_count", after);
+    }
+
+    [Fact]
+    public async Task Metrics_CanBeDisabled()
+    {
+        await using var factory = CreateFactory().WithWebHostBuilder(builder => builder.UseSetting("Metrics:Enabled", "false"));
+        var client = CreatePortalClient(factory);
+
+        var response = await client.GetAsync("/metrics");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
 }
